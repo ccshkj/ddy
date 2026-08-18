@@ -1,0 +1,12 @@
+{
+  "name": "privacy-relay",
+  "version": "1.0.0",
+  "description": "In-memory relay for privacy chat mini program (no disk persistence, ciphertext only)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

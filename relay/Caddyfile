@@ -1,0 +1,13 @@
+# Caddy 反代配置：把仅内存中继 relay:3000 通过 443 对外暴露为 wss://
+# Caddy 会自动申请并续期 Let's Encrypt 证书（零手动操作）。
+# WebSocket 升级头 Caddy 会自动透传，无需额外配置。
+
+{
+    # 申请证书需留一个真实邮箱（用于 Let's Encrypt 账号）
+    email you@example.com
+}
+
+# ↓↓↓ 改成你自己的域名，并先把该域名的 A 记录指向本服务器公网 IP ↓↓↓
+relay.yourdomain.com {
+    reverse_proxy relay:3000
+}

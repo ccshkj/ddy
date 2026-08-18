@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+miniprogram_npm/
+
+# private / local config
+project.private.config.json
+
+# logs
+npm-debug.log*
+*.log
+
+# local env
+.env
+.env.local
+
+# workbuddy internal
+.workbuddy/
+
+# OS
+.DS_Store
+Thumbs.db

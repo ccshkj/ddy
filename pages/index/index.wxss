@@ -1,0 +1,227 @@
+/* pages/index/index.wxss */
+
+/* ---------- 伪装浏览页（竖屏短视频 App 风格） ---------- */
+.decoy {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: #000;
+}
+
+.fake-status {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24rpx;
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 600;
+  text-shadow: 0 1rpx 4rpx rgba(0,0,0,0.5);
+}
+.status-icons { letter-spacing: 2rpx; opacity: 0.9; }
+
+.feed {
+  width: 100%;
+  height: 100%;
+}
+.slide {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: #000;
+}
+.video {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.meta {
+  position: absolute;
+  left: 32rpx; bottom: 140rpx;
+  right: 160rpx;
+  z-index: 45;
+  color: #fff;
+  text-shadow: 0 2rpx 8rpx rgba(0,0,0,0.6);
+}
+.author { font-size: 34rpx; font-weight: 700; margin-bottom: 8rpx; }
+.title { font-size: 28rpx; line-height: 1.4; opacity: 0.95; }
+.credit { font-size: 20rpx; opacity: 0.55; margin-top: 10rpx; }
+
+.feed-loading {
+  position: absolute;
+  left: 0; right: 0; bottom: 60rpx;
+  z-index: 46;
+  text-align: center;
+  color: #fff; font-size: 24rpx;
+  opacity: 0.8;
+  text-shadow: 0 2rpx 6rpx rgba(0,0,0,0.6);
+}
+
+.side-actions {
+  position: absolute;
+  right: 24rpx; bottom: 160rpx;
+  z-index: 45;
+  display: flex; flex-direction: column; gap: 36rpx;
+  color: #fff; font-size: 40rpx; text-align: center;
+}
+.act { text-shadow: 0 2rpx 6rpx rgba(0,0,0,0.6); }
+
+/* 左上 1/3 触发层（长按进聊天 / 下滑固定） */
+.trigger-layer {
+  position: absolute;
+  left: 0; top: 0;
+  width: 33.333%;
+  height: 33.333%;
+  z-index: 50;
+}
+.key-btn {
+  position: absolute;
+  left: 28rpx; bottom: 56rpx;
+  z-index: 60;
+  width: 72rpx; height: 72rpx;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.35);
+  color: #fff; font-size: 36rpx;
+  display: flex; align-items: center; justify-content: center;
+}
+.trigger-hint {
+  position: absolute;
+  left: 20rpx; top: 120rpx;
+  z-index: 70;
+  color: #ffd866; font-size: 22rpx;
+  background: rgba(0,0,0,0.4);
+  padding: 12rpx 16rpx; border-radius: 12rpx;
+}
+
+/* ---------- 聊天浮层 ---------- */
+.chat-overlay {
+  position: fixed;
+  left: 0; top: 0; right: 0; bottom: 0;
+  background: #f5f6f8;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+}
+.chat-header {
+  height: 96rpx;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #ececec;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: 0;
+}
+.chat-title { font-size: 32rpx; font-weight: 600; color: #222; display: flex; flex-direction: column; gap: 4rpx; }
+.relay-dot {
+  font-size: 22rpx; font-weight: 400; color: #fff;
+  padding: 2rpx 14rpx; border-radius: 999rpx; width: fit-content;
+}
+.relay-dot.connected { background: #07c160; }
+.relay-dot.connecting { background: #ff976a; }
+.relay-dot.disconnected, .relay-dot.no-room, .relay-dot.no-relay { background: #c0c4cc; }
+.quick-return {
+  font-size: 28rpx; color: #fff;
+  background: #07c160; padding: 10rpx 22rpx; border-radius: 999rpx;
+}
+
+.msg-list {
+  flex: 1;
+  padding: 24rpx;
+  overflow: hidden;
+}
+.msg-row {
+  display: flex;
+  margin-bottom: 20rpx;
+}
+.msg-row.me { justify-content: flex-end; }
+.msg-row.peer { justify-content: flex-start; }
+.bubble {
+  max-width: 70%;
+  padding: 18rpx 24rpx;
+  border-radius: 20rpx;
+  font-size: 30rpx;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.msg-row.me .bubble {
+  background: #95ec69;
+  color: #1a1a1a;
+  border-top-right-radius: 4rpx;
+}
+.msg-row.peer .bubble {
+  background: #fff;
+  color: #1a1a1a;
+  border-top-left-radius: 4rpx;
+}
+
+.chat-input {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 24rpx;
+  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1rpx solid #ececec;
+}
+.input {
+  flex: 1;
+  height: 72rpx;
+  background: #f0f1f3;
+  border-radius: 999rpx;
+  padding: 0 28rpx;
+  font-size: 30rpx;
+  color: #222;
+}
+.ph { color: #9aa0a6; }
+.send-btn {
+  flex: none;
+  height: 72rpx; line-height: 72rpx;
+  padding: 0 32rpx;
+  margin: 0;
+  background: #07c160;
+  color: #fff; border-radius: 999rpx;
+  font-size: 30rpx;
+}
+button.send-btn::after { border: none; }
+
+/* ---------- 假报错（视频加载失败） ---------- */
+.fake-error {
+  position: fixed; left: 0; top: 0; right: 0; bottom: 0;
+  z-index: 200;
+  background: #000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  color: #fff;
+}
+.fe-icon { font-size: 96rpx; margin-bottom: 24rpx; }
+.fe-title { font-size: 36rpx; font-weight: 600; margin-bottom: 12rpx; }
+.fe-sub { font-size: 26rpx; opacity: 0.7; }
+
+/* ---------- 假崩溃（页面出错，仿微信系统错误页） ---------- */
+.fake-crash {
+  position: fixed; left: 0; top: 0; right: 0; bottom: 0;
+  z-index: 300;
+  background: #f2f2f2;
+  display: flex; align-items: center; justify-content: center;
+}
+.fc-box {
+  width: 560rpx;
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 56rpx 40rpx 40rpx;
+  text-align: center;
+  box-shadow: 0 8rpx 40rpx rgba(0,0,0,0.08);
+}
+.fc-title { font-size: 34rpx; font-weight: 600; color: #333; margin-bottom: 16rpx; }
+.fc-sub { font-size: 26rpx; color: #999; margin-bottom: 40rpx; }
+.fc-btn {
+  display: inline-block;
+  min-width: 240rpx;
+  height: 76rpx; line-height: 76rpx;
+  background: #07c160; color: #fff;
+  border-radius: 12rpx; font-size: 30rpx;
+}

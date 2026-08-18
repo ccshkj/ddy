@@ -1,0 +1,90 @@
+<!-- pages/index/index.wxml -->
+<view class="decoy">
+
+  <!-- 假状态栏 -->
+  <view class="fake-status" style="height:{{statusBarHeight}}px">
+    <text class="clock">9:41</text>
+    <view class="status-icons">●●● 5G 🔋</view>
+  </view>
+
+  <!-- 真实竖屏视频流：上下滑动切换，单击播放/暂停 -->
+  <swiper class="feed" vertical current="{{currentIndex}}" bindchange="onSwiperChange">
+    <swiper-item wx:for="{{videos}}" wx:key="id">
+      <view class="slide">
+        <video class="video" id="vid{{index}}" src="{{item.src}}" poster="{{item.poster}}"
+               loop="{{true}}" controls="{{false}}" show-center-play-btn="{{false}}"
+               show-play-btn="{{false}}" show-fullscreen-btn="{{false}}"
+               object-fit="cover" enable-progress-gesture="{{false}}"
+               bindtap="onVideoTap" bindlongpress="onBrowseLongPress"></video>
+        <view class="meta">
+          <view class="author">@{{item.author}}</view>
+          <view class="title">{{item.title}}</view>
+          <view class="credit" wx:if="{{item.src.indexOf('/vproxy')>=0 || item.src.indexOf('pexels')>=0}}">视频来自 Pexels</view>
+        </view>
+        <view class="side-actions">
+          <view class="act">❤</view>
+          <view class="act">💬</view>
+          <view class="act">↪</view>
+        </view>
+      </view>
+    </swiper-item>
+  </swiper>
+
+  <!-- 无限加载提示 -->
+  <view class="feed-loading" wx:if="{{usingFeed && loadingFeed}}">加载更多视频…</view>
+
+  <!-- 左上 1/3 触发层：长按进聊天 / 下滑固定（catch 拦截，不触发视频滑动） -->
+  <view class="trigger-layer"
+        catchtouchstart="onTriggerStart"
+        catchtouchmove="onTriggerMove"
+        catchtouchend="onTriggerEnd"
+        catchtouchcancel="onTriggerEnd"></view>
+
+  <!-- 触发提示（调试用，上线置 showHint=false） -->
+  <view class="trigger-hint" wx:if="{{showHint}}">长按左上角进入聊天</view>
+
+  <!-- 密钥 / 房间 / 视频管理（一次性） -->
+  <view class="key-btn" catchtap="showKeyMenu">🔑</view>
+</view>
+
+<!-- 聊天浮层：点上方 1/3 退出 -->
+<view class="chat-overlay" wx:if="{{chatMode}}" bindtap="onOverlayTap">
+  <view class="chat-header">
+    <view class="chat-title">
+      <text>私聊 · 端到端加密</text>
+      <text class="relay-dot {{relayStatus}}">{{relayLabel}}</text>
+    </view>
+    <view class="quick-return" catchtap="quickReturn">⤺ 返回</view>
+  </view>
+
+  <scroll-view class="msg-list" scroll-y scroll-into-view="msg-{{messages.length-1}}">
+    <view wx:for="{{messages}}" wx:key="ts" id="msg-{{index}}"
+          class="msg-row {{item.role}}">
+      <view class="bubble">{{item.text}}</view>
+    </view>
+  </scroll-view>
+
+  <view class="chat-input">
+    <input class="input" value="{{draft}}" bindinput="onInput"
+           placeholder="说点什么…" placeholder-class="ph"
+           confirm-type="send" bindconfirm="onSend" />
+    <!-- 轻点=经中继发送；长按=离线分享卡片兜底 -->
+    <button class="send-btn" bindtap="onSend" bindlongpress="onSendLongPress">发送</button>
+  </view>
+</view>
+
+<!-- 假报错：视频加载失败（掩饰误触，点屏幕关闭） -->
+<view class="fake-error" wx:if="{{fakeError}}" catchtap="dismissFakeError">
+  <view class="fe-icon">⚠️</view>
+  <view class="fe-title">视频加载失败</view>
+  <view class="fe-sub">网络开小差了，点击屏幕重试</view>
+</view>
+
+<!-- 假崩溃：页面出错（假退出，外人以为程序挂了；点「关闭」真退出或仅收起） -->
+<view class="fake-crash" wx:if="{{fakeCrash}}">
+  <view class="fc-box">
+    <view class="fc-title">页面出现错误</view>
+    <view class="fc-sub">小程序运行异常，已停止响应</view>
+    <view class="fc-btn" catchtap="exitFake">关闭</view>
+  </view>
+</view>

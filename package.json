@@ -1,0 +1,8 @@
+{
+  "name": "privacy-chat-decoy",
+  "version": "1.0.0",
+  "description": "伪装浏览的端到端加密隐私聊天小程序（微信小程序）",
+  "dependencies": {
+    "tweetnacl": "^1.0.3"
+  }
+}

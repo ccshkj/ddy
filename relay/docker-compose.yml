@@ -1,0 +1,39 @@
+# 隐私聊天 · 仅内存中继 公网部署（异地两人必备）
+# 用途：在你自己的服务器上跑 relay + Caddy，Caddy 自动申请 Let's Encrypt 证书，
+#       对外暴露 wss://你的域名，零手动证书操作。
+#
+# 前置：
+#   1. 一台有公网 IP 的服务器（轻量云/ CVM 均可，1 核 512M 足够）
+#   2. 一个域名，把 A 记录指向该服务器公网 IP
+#   3. 服务器开放 80、443 入站（Caddy 用 80 做证书验证、443 对外）
+#
+# 用法：
+#   docker compose up -d
+# 之后小程序 🔑 → 设置中继地址 填：wss://你的域名
+
+version: "3.8"
+
+services:
+  relay:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "3000"
+    # 3000 只在内网暴露，由 caddy 反代，不直接对外开放
+
+  caddy:
+    image: caddy:2.7-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - relay
+
+volumes:
+  caddy_data:
+  caddy_config:

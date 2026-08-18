@@ -1,0 +1,12 @@
+/* app.wxss 全局样式 */
+page {
+  height: 100%;
+  background: #000;
+  color: #fff;
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+view, text, scroll-view, input {
+  box-sizing: border-box;
+}
