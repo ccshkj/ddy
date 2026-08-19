@@ -49,8 +49,39 @@ const CAPTIONS = [
   '慢下来才看得见美 🍃', '随拍，记录平凡日子 📷', '今天也要开心呀 🌸',
 ];
 
-const QUERIES = ['nature', 'city', 'food', 'travel', 'pet', 'ocean', 'sunset',
-  'rain', 'coffee', 'sky', 'flowers', 'dog', 'cat', 'dance', 'street', 'forest'];
+const FEED_MIX = Math.min(6, Math.max(1, parseInt(process.env.FEED_MIX || '3', 10))); // 每页混合几个主题
+
+// 竖屏短视频主题池（越多越丰富，单页随机抽几个混合）
+const QUERIES = ['nature', 'city', 'travel', 'pet', 'ocean', 'sunset', 'rain', 'coffee',
+  'sky', 'flowers', 'dog', 'cat', 'dance', 'street', 'forest', 'sport', 'mountain', 'beach',
+  'snow', 'night', 'party', 'art', 'music', 'car', 'food', 'baby', 'child', 'cloud', 'river', 'sunrise'];
+
+const POPULAR = '__popular__'; // 特殊标记：拉 Pexels 热门流
+
+// 单次调用 Pexels（search 或 popular），返回归一化后的视频数组（失败返回 []）
+function fetchPexels(query, page) {
+  return new Promise((resolve) => {
+    let url;
+    if (query === POPULAR) {
+      url = 'https://api.pexels.com/v1/videos/popular?orientation=portrait&per_page=6&page=' + page;
+    } else {
+      url = 'https://api.pexels.com/v1/videos/search?orientation=portrait&per_page=6&page=' +
+        page + '&query=' + encodeURIComponent(query);
+    }
+    const r = https.get(url, { headers: { Authorization: PEXELS_KEY } }, (pres) => {
+      let body = '';
+      pres.on('data', (d) => (body += d));
+      pres.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          resolve((data.videos || []).map(normalize).filter(Boolean));
+        } catch (e) { resolve([]); }
+      });
+    });
+    r.on('error', () => resolve([]));
+    r.setTimeout(8000, () => { r.destroy(); resolve([]); });
+  });
+}
 
 function sendJSON(res, code, obj) {
   const body = JSON.stringify(obj);
@@ -87,28 +118,34 @@ function feedHandler(req, res) {
     sendJSON(res, 200, { source: 'fallback', videos });
     return;
   }
-  const m = (req.url.split('?')[1] || '').match(/page=(\d+)/);
-  const page = Math.max(1, parseInt(m ? m[1] : '1', 10));
-  const q = QUERIES[(page * 7 + (Date.now() % QUERIES.length)) % QUERIES.length];
-  const url = 'https://api.pexels.com/v1/videos/search?orientation=portrait&per_page=10&page=' +
-    page + '&query=' + encodeURIComponent(q);
+  const queryParams = (req.url.split('?')[1] || '');
+  const pm = queryParams.match(/page=(\d+)/);
+  const page = Math.max(1, parseInt(pm ? pm[1] : '1', 10));
+  const userQ = (queryParams.match(/[?&]q=([^&]+)/) || [])[1];
 
-  const r = https.get(url, { headers: { Authorization: PEXELS_KEY } }, (pres) => {
-    let body = '';
-    pres.on('data', (d) => (body += d));
-    pres.on('end', () => {
-      try {
-        const data = JSON.parse(body);
-        const videos = (data.videos || []).map(normalize).filter(Boolean);
-        if (!videos.length) { sendJSON(res, 200, { source: 'pexels', videos: [], empty: true }); return; }
-        sendJSON(res, 200, { source: 'pexels', videos });
-      } catch (e) {
-        sendJSON(res, 502, { error: 'parse' });
-      }
-    });
+  let queries;
+  if (userQ) {
+    // 指定单一主题（未来可让前端做主题搜索）
+    queries = [decodeURIComponent(userQ)];
+  } else {
+    // 每页随机混合多个主题 + 偶尔混入热门，制造「刷不完、各不相同」的观感
+    const pool = QUERIES.slice ? QUERIES.slice() : QUERIES;
+    const picks = pool.sort(() => Math.random() - 0.5).slice(0, FEED_MIX);
+    if (Math.random() < 0.3) picks.push(POPULAR);
+    queries = picks;
+  }
+
+  Promise.all(queries.map((q) => fetchPexels(q, page))).then((lists) => {
+    const seen = new Set();
+    let merged = [];
+    lists.forEach((list) => list.forEach((v) => {
+      if (v && !seen.has(v.id)) { seen.add(v.id); merged.push(v); }
+    }));
+    // 再次打乱，避免同一主题扎堆相邻
+    merged = merged.sort(() => Math.random() - 0.5);
+    if (!merged.length) { sendJSON(res, 200, { source: 'pexels', videos: [], empty: true }); return; }
+    sendJSON(res, 200, { source: 'pexels', videos: merged });
   });
-  r.on('error', () => sendJSON(res, 502, { error: 'upstream' }));
-  r.setTimeout(8000, () => { r.destroy(); sendJSON(res, 504, { error: 'timeout' }); });
 }
 
 // 把第三方视频流代理成本域名（支持 Range，便于 <video> 拖动进度）
