@@ -15,10 +15,14 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 3000;
 const VIDEO_DIR = path.join(__dirname, 'videos');
+// 文件消息（图片/视频/语音）暂存目录：存的是「端到端加密后的密文」，服务器看不到明文
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 // 默认开启视频代转：只暴露本Railway域名，微信后台只需白名单这一个域名即可无限刷
 const PROXY = process.env.FEED_PROXY !== '0';
 const PEXELS_KEY = process.env.PEXELS_API_KEY || '';
@@ -182,6 +186,57 @@ function proxyVideo(req, res) {
   preq.end();
 }
 
+// ---------- 文件消息：端到端加密后的密文暂存（服务器不可读明文）----------
+const UPLOAD_TTL = 24 * 60 * 60 * 1000; // 密文最多保留 24 小时
+const MAX_UPLOAD = 30 * 1024 * 1024;     // 单文件上限 30MB
+
+function uploadHandler(req, res) {
+  if (req.method !== 'POST') { res.writeHead(405); res.end('method not allowed'); return; }
+  const chunks = [];
+  let size = 0;
+  req.on('data', (c) => {
+    size += c.length;
+    if (size > MAX_UPLOAD) {
+      req.destroy();
+      try { res.writeHead(413); res.end('too large'); } catch (e) {}
+      return;
+    }
+    chunks.push(c);
+  });
+  req.on('end', () => {
+    const buf = Buffer.concat(chunks);
+    if (!buf.length) { res.writeHead(400); res.end('empty'); return; }
+    const fileId = crypto.randomBytes(16).toString('hex');
+    fs.writeFile(path.join(UPLOAD_DIR, fileId), buf, (err) => {
+      if (err) { res.writeHead(500); res.end('write error'); return; }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ fileId }));
+    });
+  });
+  req.on('error', () => { try { res.writeHead(500); res.end('err'); } catch (e) {} });
+}
+
+function fileHandler(req, res) {
+  const id = (req.url.split('?')[0].slice('/file/'.length) || '').replace(/[^a-f0-9]/gi, '');
+  if (!id) { res.writeHead(400); res.end('bad id'); return; }
+  const file = path.join(UPLOAD_DIR, id);
+  if (!fs.existsSync(file)) { res.writeHead(404); res.end('not found'); return; }
+  res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' });
+  fs.createReadStream(file).pipe(res);
+}
+
+// 周期性清理过期密文，避免磁盘无限增长
+setInterval(() => {
+  fs.readdir(UPLOAD_DIR, (err, files) => {
+    if (err) return;
+    const now = Date.now();
+    files.forEach((f) => {
+      const p = path.join(UPLOAD_DIR, f);
+      fs.stat(p, (e, st) => { if (!e && now - st.mtimeMs > UPLOAD_TTL) fs.unlink(p, () => {}); });
+    });
+  });
+}, 30 * 60 * 1000);
+
 const server = http.createServer((req, res) => {
   const url = (req.url || '/').split('?')[0];
   if (url.startsWith('/v/')) {
@@ -197,6 +252,8 @@ const server = http.createServer((req, res) => {
   }
   if (url === '/feed' || url.startsWith('/feed?')) { feedHandler(req, res); return; }
   if (url === '/vproxy' || url.startsWith('/vproxy?')) { proxyVideo(req, res); return; }
+  if (url === '/upload') { uploadHandler(req, res); return; }
+  if (url.startsWith('/file/')) { fileHandler(req, res); return; }
   res.writeHead(404); res.end('not found');
 });
 
@@ -278,4 +335,5 @@ server.listen(PORT, () => {
   console.log(`[relay] static videos served at /v/ from ${VIDEO_DIR}`);
   console.log(`[relay] feed: ${PEXELS_KEY ? 'Pexels enabled' : 'Pexels DISABLED (fallback list only)'}`);
   console.log(`[relay] video proxy: ${PROXY ? 'ON (only this domain needs whitelisting)' : 'OFF (use Pexels CDN direct)'}`);
+  console.log(`[relay] file messages (E2EE ciphertext): stored at ${UPLOAD_DIR}, TTL 24h, max 30MB`);
 });

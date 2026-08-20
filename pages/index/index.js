@@ -81,6 +81,7 @@ Page({
     this._room = wx.getStorageSync('relay_room') || '';
 
     this._loadLocalMessages();
+    this._initRecorder();
 
     // 通过离线分享卡片进入：本地解密收到的消息
     if (options.msg) {
@@ -195,9 +196,26 @@ Page({
       });
       if (add.length < list.length) this.setData({ hasMore: false });
     } catch (e) {
-      // 第一页就失败：退回兜底视频，保证开箱能用
+      // 第一页就失败：退回兜底视频，保证开箱能用，并把具体原因透出便于排查
       if (page === 1 && this.data.videos === DEFAULT_VIDEOS) {
         this.setData({ usingFeed: false, hasMore: false, loadingFeed: false });
+        if (!relay.getRelayUrl()) {
+          wx.showToast({ title: '请先在 🔑 设置中继地址', icon: 'none' });
+        } else {
+          const reason = (e && e.errMsg) ? e.errMsg : (e && e.message) ? e.message : '未知错误';
+          const host = (relay.getApiBase() || '').replace(/^https?:\/\//, '');
+          if (reason.includes('domain list')) {
+            wx.showModal({
+              title: '请求域名未在白名单',
+              content: '请去小程序后台「服务器域名 → request合法域名」添加：\nhttps://' + host + '\n\n当前请求被微信拦截，添加后等几分钟再重新打开小程序。',
+              showCancel: false,
+              confirmText: '知道了',
+            });
+          } else {
+            wx.showToast({ title: '视频源失败:' + reason, icon: 'none', duration: 4000 });
+          }
+          console.error('[feed] 加载失败:', reason, '| 请求域名:', host);
+        }
       } else {
         this.setData({ hasMore: false, loadingFeed: false });
       }
@@ -230,9 +248,15 @@ Page({
   _onRelayMessage(msg) {
     if (msg.from === this._uid) return; // 忽略自己
     try {
-      const text = crypto.decrypt(msg.payload); // 本机解密
-      this._appendLocal({ role: 'peer', text, ts: Date.now() });
-      wx.vibrateShort({ type: 'light' });
+      const plain = crypto.decrypt(msg.payload); // 本机解密
+      let obj;
+      try { obj = JSON.parse(plain); } catch (e) { obj = { kind: 'text', text: plain }; } // 兼容旧纯文本
+      if (obj.kind && obj.kind !== 'text') {
+        this._recvFile(obj); // 图片/视频/语音：下载密文 -> 解密 -> 写临时文件
+      } else {
+        this._appendLocal({ role: 'peer', text: obj.text, ts: Date.now() });
+        wx.vibrateShort({ type: 'light' });
+      }
     } catch (e) {
       console.error('解密失败', e);
     }
@@ -322,7 +346,7 @@ Page({
     }
     let payload;
     try {
-      payload = crypto.encrypt(text); // 本机加密，密文 base64
+      payload = crypto.encrypt(JSON.stringify({ kind: 'text', text })); // 本机加密，密文 base64
     } catch (err) {
       wx.showToast({ title: err.message, icon: 'none' });
       return;
@@ -467,6 +491,100 @@ Page({
 
   _loadLocalMessages() {
     this.setData({ messages: chat.loadLocal() });
+  },
+
+  // 录音管理器（长按语音按钮录制，松开发送）
+  _initRecorder() {
+    const rm = wx.getRecorderManager();
+    this._recorder = rm;
+    rm.onStop((res) => {
+      if (res && res.tempFilePath) this._sendFile(res.tempFilePath, 'voice', Math.round((res.duration || 0) / 1000));
+    });
+    rm.onError(() => wx.showToast({ title: '录音失败', icon: 'none' }));
+  },
+
+  // 选图片 / 选视频，统一走端到端加密文件消息
+  onPickImage() {
+    wx.chooseMedia({
+      count: 1, mediaType: ['image'], sizeType: ['compressed'],
+      success: (r) => { const f = r.tempFiles[0]; if (f) this._sendFile(f.tempFilePath, 'image'); },
+      fail: () => {},
+    });
+  },
+  onPickVideo() {
+    wx.chooseMedia({
+      count: 1, mediaType: ['video'], maxDuration: 30,
+      success: (r) => { const f = r.tempFiles[0]; if (f) this._sendFile(f.tempFilePath, 'video', Math.round(f.duration || 0)); },
+      fail: () => {},
+    });
+  },
+  onVoiceStart() {
+    wx.authorize({
+      scope: 'scope.record',
+      fail: () => wx.showToast({ title: '请在设置里允许麦克风', icon: 'none' }),
+    });
+    try { this._recorder && this._recorder.start({ duration: 60000, format: 'mp3' }); } catch (e) {}
+  },
+  onVoiceEnd() {
+    try { this._recorder && this._recorder.stop(); } catch (e) {}
+  },
+
+  // 发送端到端加密文件消息：选/录 -> 读字节 -> 随机对称密钥加密 -> 上传密文 -> 经中继发描述符
+  async _sendFile(tempFilePath, kind, duration) {
+    if (!this._room) { wx.showToast({ title: '请先在 🔑 里设置房间号', icon: 'none' }); return; }
+    wx.showLoading({ title: '加密发送中' });
+    try {
+      const buf = await new Promise((resolve, reject) => {
+        wx.getFileSystemManager().readFile({ filePath: tempFilePath, success: (r) => resolve(r.data), fail: reject });
+      });
+      const kfB64 = crypto.randomKeyB64();        // 本文件独立对称密钥
+      const sealedKey = crypto.encrypt(kfB64);    // 用对方公钥封装，只有对方能解
+      const cipher = crypto.fileSeal(buf, kfB64);  // 对称加密文件字节
+      const fileId = await relay.uploadFile(cipher.buffer, { kind });
+      const payload = crypto.encrypt(JSON.stringify({ kind, fileId, sealedKey, duration: duration || 0, name: kind }));
+      this._appendLocal({ role: 'me', kind, localPath: tempFilePath, duration: duration || 0, ts: Date.now() });
+      try {
+        await this._ensureRelay();
+        const ok = relay.send(payload);
+        if (!ok) wx.showToast({ title: '中继未连接，已存本机', icon: 'none' });
+      } catch (e) { wx.showToast({ title: '中继未连接，已存本机', icon: 'none' }); }
+    } catch (e) {
+      wx.showToast({ title: '发送失败：' + (e.message || e.errMsg || ''), icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
+  },
+
+  // 接收端到端加密文件消息：下载密文 -> 用对称密钥解密 -> 写临时文件 -> 渲染
+  async _recvFile(json) {
+    try {
+      const kfB64 = crypto.decrypt(json.sealedKey); // 解开对称密钥
+      const buf = await relay.downloadFileArrayBuffer(json.fileId);
+      const plain = crypto.fileOpen(new Uint8Array(buf), kfB64);
+      const ext = json.kind === 'voice' ? 'mp3' : (json.kind === 'video' ? 'mp4' : 'png');
+      const tmp = `${wx.env.USER_DATA_PATH}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+      await new Promise((resolve, reject) => {
+        wx.getFileSystemManager().writeFile({ filePath: tmp, data: plain.buffer, success: resolve, fail: reject });
+      });
+      this._appendLocal({ role: 'peer', kind: json.kind, localPath: tmp, duration: json.duration || 0, ts: Date.now() });
+      wx.vibrateShort({ type: 'light' });
+    } catch (e) {
+      console.error('文件消息接收失败', e);
+      this._appendLocal({ role: 'peer', text: '[图片/视频加载失败]', ts: Date.now() });
+    }
+  },
+
+  previewImage(e) {
+    const p = e.currentTarget.dataset.path;
+    if (p) wx.previewImage({ urls: [p], current: p });
+  },
+  playVoice(e) {
+    const p = e.currentTarget.dataset.path;
+    if (!p) return;
+    if (!this._audio) this._audio = wx.createInnerAudioContext();
+    this._audio.stop();
+    this._audio.src = p;
+    this._audio.play();
   },
 
   _winInfo() {

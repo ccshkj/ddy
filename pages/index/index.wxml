@@ -43,8 +43,8 @@
   <!-- 触发提示（调试用，上线置 showHint=false） -->
   <view class="trigger-hint" wx:if="{{showHint}}">长按左上角进入聊天</view>
 
-  <!-- 密钥 / 房间 / 视频管理（一次性） -->
-  <view class="key-btn" catchtap="showKeyMenu">🔑</view>
+  <!-- 密钥/房间/视频管理：顶部中间极小的隐蔽触发区（不再显示钥匙图标） -->
+  <view class="key-zone" style="top:{{statusBarHeight}}px" catchtap="showKeyMenu"></view>
 </view>
 
 <!-- 聊天浮层：点上方 1/3 退出 -->
@@ -60,11 +60,28 @@
   <scroll-view class="msg-list" scroll-y scroll-into-view="msg-{{messages.length-1}}">
     <view wx:for="{{messages}}" wx:key="ts" id="msg-{{index}}"
           class="msg-row {{item.role}}">
-      <view class="bubble">{{item.text}}</view>
+      <view wx:if="{{item.kind === 'image'}}" class="bubble media">
+        <image class="msg-image" src="{{item.localPath}}" mode="widthFix"
+               bindtap="previewImage" data-path="{{item.localPath}}"/>
+      </view>
+      <view wx:elif="{{item.kind === 'video'}}" class="bubble media">
+        <video class="msg-video" src="{{item.localPath}}" controls="{{true}}"
+               show-fullscreen-btn="{{false}}" object-fit="cover"></video>
+      </view>
+      <view wx:elif="{{item.kind === 'voice'}}" class="bubble media voice"
+            bindtap="playVoice" data-path="{{item.localPath}}">
+        <text class="voice-icon">▶</text><text class="voice-dur">{{item.duration}}″</text>
+      </view>
+      <view wx:else class="bubble">{{item.text}}</view>
     </view>
   </scroll-view>
 
   <view class="chat-input">
+    <view class="media-tools">
+      <view class="tool" catchtap="onPickImage">🖼</view>
+      <view class="tool" catchtap="onPickVideo">🎬</view>
+      <view class="tool" catchtouchstart="onVoiceStart" catchtouchend="onVoiceEnd">🎤</view>
+    </view>
     <input class="input" value="{{draft}}" bindinput="onInput"
            placeholder="说点什么…" placeholder-class="ph"
            confirm-type="send" bindconfirm="onSend" />

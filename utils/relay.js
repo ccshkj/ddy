@@ -6,7 +6,8 @@
 //
 // 本地测试：ws://电脑局域网IP:3000
 // 真机：必须 wss://你的域名（并在小程序后台配置 socket 合法域名）
-const DEFAULT_URL = ''; // 留空，由 🔑 菜单设置；也可改成你的固定地址
+// 默认中继地址（生产环境）。用户仍可在 🔑 -> 设置中继地址 里覆盖。
+const DEFAULT_URL = 'wss://ddy-production.up.railway.app';
 
 function getRelayUrl() {
   try { return wx.getStorageSync('relay_url') || DEFAULT_URL; } catch (e) { return DEFAULT_URL; }
@@ -91,4 +92,42 @@ function isConnected() {
   return connected && task && task.readyState === 1;
 }
 
-module.exports = { connect, send, isConnected, getRelayUrl, setRelayUrl, getApiBase };
+// 上传「端到端加密后的文件密文」到中继，返回 fileId
+function uploadFile(arrayBuffer, meta) {
+  return new Promise((resolve, reject) => {
+    const base = getApiBase();
+    if (!base) return reject(new Error('no relay url'));
+    const qs = Object.keys(meta || {}).map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(meta[k])).join('&');
+    wx.request({
+      url: base + '/upload' + (qs ? '?' + qs : ''),
+      method: 'POST',
+      data: arrayBuffer, // 二进制密文
+      header: { 'Content-Type': 'application/octet-stream' },
+      success: (res) => {
+        if (res.statusCode === 200 && res.data && res.data.fileId) resolve(res.data.fileId);
+        else reject(new Error('upload failed ' + res.statusCode));
+      },
+      fail: (e) => reject(e),
+    });
+  });
+}
+
+// 下载文件密文（ArrayBuffer），由前端 fileOpen 解密
+function downloadFileArrayBuffer(fileId) {
+  return new Promise((resolve, reject) => {
+    const base = getApiBase();
+    if (!base) return reject(new Error('no relay url'));
+    wx.request({
+      url: base + '/file/' + encodeURIComponent(fileId),
+      method: 'GET',
+      responseType: 'arraybuffer',
+      success: (res) => {
+        if (res.statusCode === 200 && res.data) resolve(res.data);
+        else reject(new Error('download failed ' + res.statusCode));
+      },
+      fail: (e) => reject(e),
+    });
+  });
+}
+
+module.exports = { connect, send, isConnected, getRelayUrl, setRelayUrl, getApiBase, uploadFile, downloadFileArrayBuffer };

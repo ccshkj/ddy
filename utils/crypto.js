@@ -124,10 +124,39 @@ function decrypt(payloadB64) {
   return utf8ToStr(plain);
 }
 
+// ---------- 文件消息：每个文件独立随机对称密钥 + secretbox ----------
+function randomKeyB64() {
+  return bytesToB64(nacl.randomBytes(nacl.secretbox.keyLength));
+}
+
+// 用对称密钥加密文件字节（nonce 写入头部），返回 Uint8Array (nonce|cipher)
+function fileSeal(bytes, keyB64) {
+  const key = b64ToBytes(keyB64);
+  const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
+  const cipher = nacl.secretbox(new Uint8Array(bytes), nonce, key);
+  const out = new Uint8Array(nonce.length + cipher.length);
+  out.set(nonce, 0);
+  out.set(cipher, nonce.length);
+  return out;
+}
+
+// 解密文件字节，返回 Uint8Array 明文
+function fileOpen(merged, keyB64) {
+  const key = b64ToBytes(keyB64);
+  const nonce = merged.slice(0, nacl.secretbox.nonceLength);
+  const cipher = merged.slice(nacl.secretbox.nonceLength);
+  const plain = nacl.secretbox.open(cipher, nonce, key);
+  if (!plain) throw new Error('文件解密失败（密钥不匹配）');
+  return plain;
+}
+
 module.exports = {
   getMyPublicKeyB64,
   getPeerPublicKeyB64,
   setPeerPublicKeyB64,
   encrypt,
   decrypt,
+  randomKeyB64,
+  fileSeal,
+  fileOpen,
 };
